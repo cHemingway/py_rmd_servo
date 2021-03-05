@@ -85,11 +85,27 @@ class RMD_Servo:
         temperature, voltage, error = struct.unpack("<20s",response)
         return {"temperature":temperature, "voltage":voltage, "error":error}
 
+    def shutdown(self):
+        self._send_raw_command(0x80)
+
+    def clear_errors(self):
+        self._send_raw_command(0x9B)
+
+    def enable_movement(self):
+        ''' Restore operation after stop command '''
+        self._send_raw_command(0x88)
+
+
 
 if __name__ == "__main__":
     import time
     servo = RMD_Servo("COM5")
     print(servo.read_model())
+
+    servo.shutdown()
+    time.sleep(0.1)
+    servo.clear_errors()
+    servo.enable_movement()
 
     while 1:
         print("Encoder: ", servo.read_encoder())
