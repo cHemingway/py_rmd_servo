@@ -1,5 +1,5 @@
 import dataclasses
-from enum import Enum
+import logging
 import struct
 from typing import Union
 
@@ -79,13 +79,16 @@ class RMD_Servo:
             to_send[-1] = sum(to_send[5:-1]) % 255  # Data checksum
         # Transfer data
         self.ser.reset_input_buffer()
+        logging.info(f"TX: {to_send.hex()}")
         self.ser.write(to_send)
         # Get response, at least 5 bytes
         resp_header = self.ser.read(5)
+        logging.info(f"RX Header: {resp_header.hex()}")
         response_len = self._parse_response_header(resp_header, command)
         if response_len is not None:
             # +1 as length excludes checksum
             response = self.ser.read(response_len+1)
+            logging.info(f"RX Data: {response.hex()}")
             # TODO check response checksum
             return response[0:-1]
         elif response_len == 0:
@@ -216,6 +219,9 @@ class RMD_S_Servo(RMD_Servo):
 
 if __name__ == "__main__":
     import time
+
+    logging.basicConfig(level=logging.DEBUG)
+
     servo = RMD_S_Servo("COM5")
     print("Connected: ", servo.read_model())
 
@@ -247,9 +253,7 @@ if __name__ == "__main__":
     time.sleep(0.5)
 
     print("Testing constant speed")
-    print(servo.move_closed_loop_speed(1000))
-    time.sleep(1)
-    print(servo.move_closed_loop_speed(2000))
+    print(servo.move_closed_loop_speed(1444))
     time.sleep(1)
     servo.stop()
 
