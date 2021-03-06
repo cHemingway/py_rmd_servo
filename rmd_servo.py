@@ -192,7 +192,7 @@ class RMD_Servo:
         ''' Move closed loop at speed_dps degrees per second 
             Returns temperature, torque_current_IQ, speed, position
         '''
-        speed = int(speed_dps * 0.01)  # Scale to 0.01 DPS/LSB
+        speed = int(speed_dps * 100)  # Scale to 0.01 DPS/LSB
         data = struct.pack("<i", speed)
         response = self._send_raw_command(0xA2, data)
         return self._unpack_movement_response(response)
