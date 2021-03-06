@@ -84,9 +84,10 @@ class RMD_Servo:
         resp_header = self.ser.read(5)
         response_len = self._parse_response_header(resp_header, command)
         if response_len is not None:
-            response = self.ser.read(response_len)
+            # +1 as length excludes checksum
+            response = self.ser.read(response_len+1)
             # TODO check response checksum
-            return response
+            return response[0:-1]
         elif response_len == 0:
             pass  # No response
         else:
@@ -102,30 +103,47 @@ class RMD_Servo:
                 "speed": speed, "position": position}
 
     @staticmethod
-    def _unpack_pi_response(response):
+    def _unpack_pi_response(response) -> PI_Parameters:
         ''' Unpacks a PI response into a PI_Parameters dataclass '''
         if len(response) != 6:
             raise IOError("Did not get right number of returned values")
         return PI_Parameters(*struct.unpack("BBBBBB", response))
 
+    @staticmethod
+    def _unpack_acceleration(response) -> int:
+        if len(response) != 4:
+            raise IOError("Did not get right number of bytes for acceleration")
+        return struct.unpack("<I", response)[0]
+
     def read_pi_parameters(self) -> PI_Parameters:
         ''' Read current PI parameters '''
         resp = self._send_raw_command(0x30)
-        return _unpack_pi_response(resp)
+        return self._unpack_pi_response(resp)
 
     def write_pi_parameters_ram(self, params: PI_Parameters) -> PI_Parameters:
         ''' Write PI parameters into RAM, will be lost on servo power off
             Returns the servos response    
          '''
         resp = self._send_raw_command(0x31, params.pack())
-        return _unpack_pi_response(resp)
+        return self._unpack_pi_response(resp)
 
     def write_pi_parameters_rom(self, params: PI_Parameters) -> PI_Parameters:
         ''' Write PI parameters into ROM, will be kept after power off 
             Returns the servos response
         '''
         resp = self._send_raw_command(0x32, params.pack())
-        return _unpack_pi_response(resp)
+        return self._unpack_pi_response(resp)
+
+    def read_acceleration(self) -> int:
+        ''' Read acceleration setting in degrees per second '''
+        resp = self._send_raw_command(0x33)
+        return self._unpack_acceleration(resp)
+
+    def write_acceleration_ram(self, acceleration: int) -> int:
+        ''' Write acceleration setting in degrees per second '''
+        #FIXME: Does not work? Returned value is very different
+        resp = self._send_raw_command(0x34, struct.pack("<I", acceleration))
+        return self._unpack_acceleration(resp)
 
     def read_encoder(self) -> int:
         encoder_data = self._send_raw_command(0x90)
@@ -212,6 +230,10 @@ if __name__ == "__main__":
     pi_params.speed_ki = 0
     servo.write_pi_parameters_ram(pi_params)
 
+    # Set acceleration
+    #servo.write_acceleration_ram(5000)
+    print("Max acceleration: ", servo.read_acceleration())
+
     print("Warning, servo will start moving in 5 seconds!")
     time.sleep(5)
     servo.enable_movement()
@@ -222,11 +244,12 @@ if __name__ == "__main__":
     print(servo.move_open_loop(100))
     time.sleep(1)
     servo.move_open_loop(0)
+    time.sleep(0.5)
 
     print("Testing constant speed")
-    print(servo.move_closed_loop_speed(100))
+    print(servo.move_closed_loop_speed(1000))
     time.sleep(1)
-    print(servo.move_closed_loop_speed(200))
+    print(servo.move_closed_loop_speed(2000))
     time.sleep(1)
     servo.stop()
 
