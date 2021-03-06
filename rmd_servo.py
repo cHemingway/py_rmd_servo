@@ -105,15 +105,17 @@ class RMD_S_Servo(RMD_Servo):
         super().__init__(serial_port, id=id, baudrate=baudrate, timeout_s=timeout_s)
 
     def move_open_loop(self, power: int) -> dict:
-        ''' Move using Torque Open Loop command '''
-        # FIXME: Does not work with negative power?
+        ''' Move using Torque Open Loop command.
+            Returns temperature, (previous) power, current speed, current position
+        '''
+        # FIXME: Does not work with negative power? Gets no response
         if abs(power) > 1000:
             raise ValueError("Power must be in range -1000 to 1000")
         data = struct.pack("<h", power)  # Convert power to little endian short
         response = self._send_raw_command(0xA0, data)
 
         temperature, power, speed, position = struct.unpack("<BhhH", response)
-        return {"temperature": temperature, "power": power, 
+        return {"temperature": temperature, "power": power,
                 "speed": speed, "position": position}
 
 
@@ -128,9 +130,9 @@ if __name__ == "__main__":
     servo.enable_movement()
 
     print("Testing open loop")
-    servo.move_open_loop(200)
+    print(servo.move_open_loop(200))
     time.sleep(1)
-    servo.move_open_loop(100)
+    print(servo.move_open_loop(100))
     time.sleep(1)
     servo.move_open_loop(0)
 
