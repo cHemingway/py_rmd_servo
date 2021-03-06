@@ -1,3 +1,4 @@
+import dataclasses
 from enum import Enum
 import struct
 from typing import Union
@@ -9,6 +10,30 @@ import serial.rs485
 # Used for multiple commands, so specify it here for berevity and execution speed,
 # as struct.Struct precompiles the unpacking
 movement_resp_struct = struct.Struct("<BhhH")
+
+
+@dataclasses.dataclass
+class PI_Parameters:
+    ''' Dataclass to hold settings of each PI control loop. Each value is unsigned int '''
+    angle_kp:  int  # P parameter of position ring
+    angle_ki:  int  # I parameter of position ring
+    speed_kp:  int  # P parameter of speed ring
+    speed_ki:  int  # I parameter of speed ring
+    torque_kp: int  # P parameter of torque ring
+    torque_ki: int  # I parameter of torque ring
+
+    def astuple(self):
+        ''' Return a tuple of each field value in order '''
+        return dataclasses.astuple(self)
+
+    def __post_init__(self):
+        ''' Check values are in range '''
+        if min(*self.astuple(), 0) < 0 or max(*self.astuple(), 255) > 255:
+            raise ValueError("All values must be in range 0-255")
+
+    def pack(self):
+        ''' Pack into binary format used by servo '''
+        return struct.pack("BBBBBB", *self.astuple())
 
 
 class RMD_Servo:
@@ -75,6 +100,32 @@ class RMD_Servo:
         # TODO: For RMD-X, RMD-L, power is actually Torque (iq)
         return {"temperature": temperature, "power": power,
                 "speed": speed, "position": position}
+
+    @staticmethod
+    def _unpack_pi_response(response):
+        ''' Unpacks a PI response into a PI_Parameters dataclass '''
+        if len(response) != 6:
+            raise IOError("Did not get right number of returned values")
+        return PI_Parameters(*struct.unpack("BBBBBB", response))
+
+    def read_pi_parameters(self) -> PI_Parameters:
+        ''' Read current PI parameters '''
+        resp = self._send_raw_command(0x30)
+        return _unpack_pi_response(resp)
+
+    def write_pi_parameters_ram(self, params: PI_Parameters) -> PI_Parameters:
+        ''' Write PI parameters into RAM, will be lost on servo power off
+            Returns the servos response    
+         '''
+        resp = self._send_raw_command(0x31, params.pack())
+        return _unpack_pi_response(resp)
+
+    def write_pi_parameters_rom(self, params: PI_Parameters) -> PI_Parameters:
+        ''' Write PI parameters into ROM, will be kept after power off 
+            Returns the servos response
+        '''
+        resp = self._send_raw_command(0x32, params.pack())
+        return _unpack_pi_response(resp)
 
     def read_encoder(self) -> int:
         encoder_data = self._send_raw_command(0x90)
@@ -148,13 +199,21 @@ class RMD_S_Servo(RMD_Servo):
 if __name__ == "__main__":
     import time
     servo = RMD_S_Servo("COM5")
-    print(servo.read_model())
+    print("Connected: ", servo.read_model())
 
+    # Stop servo and clear errors so motor is in known state
     servo.shutdown()
+    servo.clear_errors()
+
+    # Get and set PI Parameters
+    pi_params = servo.read_pi_parameters()
+    print("PI_params: ", pi_params)
+    # TODO: Work out what these should be
+    pi_params.speed_ki = 0
+    servo.write_pi_parameters_ram(pi_params)
+
     print("Warning, servo will start moving in 5 seconds!")
     time.sleep(5)
-    # Clear errors so motor is in known state
-    servo.clear_errors()
     servo.enable_movement()
 
     print("Testing open loop")
