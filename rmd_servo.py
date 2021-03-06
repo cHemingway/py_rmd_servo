@@ -7,6 +7,8 @@ import serial.rs485
 
 
 class RMD_Servo:
+    ''' Base class for all RMD series servos. You should use your models subclass instead '''
+
     def __init__(self, serial_port: str, id: int = 1, baudrate: int = 115200, timeout_s: float = 0.5):
         self.id = id
         self.ser = serial.Serial(
@@ -42,6 +44,9 @@ class RMD_Servo:
         to_send[2] = self.id
         to_send[3] = data_len
         to_send[4] = sum(to_send[0:4]) % 255    # Fill header_checksum
+        if data:
+            to_send[5:-1] = data
+            to_send[-1] = sum(to_send[5:-1]) % 255  # Data checksum
         # Transfer data
         self.ser.reset_input_buffer()
         self.ser.write(to_send)
@@ -93,9 +98,28 @@ class RMD_Servo:
         self._send_raw_command(0x88)
 
 
+class RMD_S_Servo(RMD_Servo):
+    ''' RMD-S Model Servos '''
+
+    def __init__(self, serial_port, id=1, baudrate=115200, timeout_s=0.5):
+        super().__init__(serial_port, id=id, baudrate=baudrate, timeout_s=timeout_s)
+
+    def move_open_loop(self, power: int) -> dict:
+        ''' Move using Torque Open Loop command '''
+        # FIXME: Does not work with negative power?
+        if abs(power) > 1000:
+            raise ValueError("Power must be in range -1000 to 1000")
+        data = struct.pack("<h", power)  # Convert power to little endian short
+        response = self._send_raw_command(0xA0, data)
+
+        temperature, power, speed, position = struct.unpack("<BhhH", response)
+        return {"temperature": temperature, "power": power, 
+                "speed": speed, "position": position}
+
+
 if __name__ == "__main__":
     import time
-    servo = RMD_Servo("COM5")
+    servo = RMD_S_Servo("COM5")
     print(servo.read_model())
 
     servo.shutdown()
@@ -103,6 +127,14 @@ if __name__ == "__main__":
     servo.clear_errors()
     servo.enable_movement()
 
+    print("Testing open loop")
+    servo.move_open_loop(200)
+    time.sleep(1)
+    servo.move_open_loop(100)
+    time.sleep(1)
+    servo.move_open_loop(0)
+
+    print("Stopped, reading encoder value")
     while 1:
         print("Encoder: ", servo.read_encoder())
         time.sleep(0.25)
