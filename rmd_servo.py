@@ -5,6 +5,11 @@ from typing import Union
 import serial
 import serial.rs485
 
+# Struct format for movement response
+# Used for multiple commands, so specify it here for berevity and execution speed,
+# as struct.Struct precompiles the unpacking
+movement_resp_struct = struct.Struct("<BhhH")
+
 
 class RMD_Servo:
     ''' Base class for all RMD series servos. You should use your models subclass instead '''
@@ -62,6 +67,15 @@ class RMD_Servo:
         else:
             raise IOError("Recieved wrong response header")
 
+    @staticmethod
+    def _unpack_movement_response(response):
+        ''' Unpacks a movement response into a dict '''
+        temperature, power, speed, position = movement_resp_struct.unpack(
+            response)
+        # TODO: For RMD-X, RMD-L, power is actually Torque (iq)
+        return {"temperature": temperature, "power": power,
+                "speed": speed, "position": position}
+
     def read_encoder(self) -> int:
         encoder_data = self._send_raw_command(0x90)
         # Return encoder position minus offset
@@ -88,7 +102,12 @@ class RMD_Servo:
         return {"temperature": temperature, "voltage": voltage, "error": error}
 
     def shutdown(self):
+        ''' Stop motion, clear state and previous instructions '''
         self._send_raw_command(0x80)
+
+    def stop(self):
+        ''' Stop motion, but do not clear state or previous instructions '''
+        self._send_raw_command(0x81)
 
     def clear_errors(self):
         self._send_raw_command(0x9B)
@@ -96,6 +115,15 @@ class RMD_Servo:
     def enable_movement(self):
         ''' Restore operation after stop command '''
         self._send_raw_command(0x88)
+
+    def move_closed_loop_speed(self, speed_dps: float):
+        ''' Move closed loop at speed_dps degrees per second 
+            Returns temperature, torque_current_IQ, speed, position
+        '''
+        speed = int(speed_dps * 0.01)  # Scale to 0.01 DPS/LSB
+        data = struct.pack("<i", speed)
+        response = self._send_raw_command(0xA2, data)
+        return self._unpack_movement_response(response)
 
 
 class RMD_S_Servo(RMD_Servo):
@@ -105,18 +133,16 @@ class RMD_S_Servo(RMD_Servo):
         super().__init__(serial_port, id=id, baudrate=baudrate, timeout_s=timeout_s)
 
     def move_open_loop(self, power: int) -> dict:
-        ''' Move using Torque Open Loop command.
-            Returns temperature, (previous) power, current speed, current position
+        ''' Move open loop with set power.
+            Returns temperature, (previously set) power, speed, position
         '''
         # FIXME: Does not work with negative power? Gets no response
+        # Check input is in range
         if abs(power) > 1000:
             raise ValueError("Power must be in range -1000 to 1000")
         data = struct.pack("<h", power)  # Convert power to little endian short
         response = self._send_raw_command(0xA0, data)
-
-        temperature, power, speed, position = struct.unpack("<BhhH", response)
-        return {"temperature": temperature, "power": power,
-                "speed": speed, "position": position}
+        return self._unpack_movement_response(response)
 
 
 if __name__ == "__main__":
@@ -125,7 +151,9 @@ if __name__ == "__main__":
     print(servo.read_model())
 
     servo.shutdown()
-    time.sleep(0.1)
+    print("Warning, servo will start moving in 5 seconds!")
+    time.sleep(5)
+    # Clear errors so motor is in known state
     servo.clear_errors()
     servo.enable_movement()
 
@@ -135,6 +163,13 @@ if __name__ == "__main__":
     print(servo.move_open_loop(100))
     time.sleep(1)
     servo.move_open_loop(0)
+
+    print("Testing constant speed")
+    print(servo.move_closed_loop_speed(100))
+    time.sleep(1)
+    print(servo.move_closed_loop_speed(200))
+    time.sleep(1)
+    servo.stop()
 
     print("Stopped, reading encoder value")
     while 1:
