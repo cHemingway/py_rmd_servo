@@ -5,6 +5,24 @@ import unittest.mock as mock
 import rmd_servo
 
 
+class Test__parse_response_header(unittest.TestCase):
+    def setUp(self):
+        self.patcher = unittest.mock.patch(
+            "rmd_servo.serial.Serial", autospec=True)
+        self.mock_serial = self.patcher.start()            
+        self.servo = rmd_servo.RMD_Servo("test", 2)
+
+    def test_wrong_len(self):
+        self.assertIsNone(self.servo._parse_response_header(bytearray(4), 1),
+                          "Resp of length 4 should fail")
+        self.assertIsNone(self.servo._parse_response_header(bytearray(6), 1),
+                          "Resp of length 6 should fail")
+
+    def tearDown(self):
+        mock.patch.stopall() # Stop mocks, or else other tests are corrupted
+        return super().tearDown()
+
+
 class Test__send_raw_command(unittest.TestCase):
     ''' Verify that __send_raw_command passes correct data to serial port '''
 
@@ -29,6 +47,10 @@ class Test__send_raw_command(unittest.TestCase):
         self.servo._send_raw_command(0xAA)
         self.servo.ser.reset_input_buffer.assert_called_once()
         self.servo.ser.write.assert_called_once_with(bytes(expected_tx))
+
+    def tearDown(self):
+        mock.patch.stopall() # Stop mocks, or else other tests are corrupted
+        return super().tearDown()
 
 
 class Test_move_closed_loop_speed(unittest.TestCase):
@@ -59,6 +81,9 @@ class Test_move_closed_loop_speed(unittest.TestCase):
                              }
                              )
 
+    def tearDown(self):
+        mock.patch.stopall()  # Stop mocks, or else other tests are corrupted
+        return super().tearDown()
 
 if __name__ == "__main__":
     unittest.main()
