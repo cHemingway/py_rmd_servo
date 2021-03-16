@@ -52,7 +52,7 @@ class RMD_Servo:
         if len(resp) != 5:
             return None
         # Verify checksum
-        if sum(resp[0:4]) != resp[4]:
+        if (sum(resp[0:4]) % 255) != resp[4]:
             return None
         # Verify expected command (should be same as sent)
         if resp[1] != expected_command:
@@ -220,7 +220,7 @@ class RMD_S_Servo(RMD_Servo):
 if __name__ == "__main__":
     import time
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.ERROR)
 
     servo = RMD_S_Servo("COM5")
     print("Connected: ", servo.read_model())
@@ -254,7 +254,7 @@ if __name__ == "__main__":
 
     print("Testing constant speed")
     print(servo.move_closed_loop_speed(1444))
-    time.sleep(1)
+    time.sleep(10)
     servo.stop()
 
     print("Stopped, reading encoder value")

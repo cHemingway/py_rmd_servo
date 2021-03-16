@@ -18,6 +18,23 @@ class Test__parse_response_header(unittest.TestCase):
         self.assertIsNone(self.servo._parse_response_header(bytearray(6), 1),
                           "Resp of length 6 should fail")
 
+    def test_checksum(self):
+        # Test command 0x04, data length 0
+        valid_data = bytearray([0x3E,0x04,0x02,0x00,0x44])
+        length = self.servo._parse_response_header(valid_data,0x04)
+        self.assertEqual(length, 0)
+
+        # Test command 0xFF, data length 5
+        valid_data = bytearray([0x3E,0xFF,0x02,0x05,0x45])
+        length = self.servo._parse_response_header(valid_data,0xFF)
+        self.assertEqual(length, 5)
+
+        # Test invalid checksum
+        invalid_data = bytearray([0x3E,0xFF,0x02,0x05,0x45])
+        length = self.servo._parse_response_header(valid_data,0x45)
+        self.assertIsNone(length)
+
+
     def tearDown(self):
         mock.patch.stopall() # Stop mocks, or else other tests are corrupted
         return super().tearDown()
