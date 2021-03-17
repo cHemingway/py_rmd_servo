@@ -30,8 +30,8 @@ class Test__parse_response_header(unittest.TestCase):
         self.assertEqual(length, 5)
 
         # Test invalid checksum
-        invalid_data = bytearray([0x3E,0xFF,0x02,0x05,0x45])
-        length = self.servo._parse_response_header(valid_data,0x45)
+        invalid_data = bytearray([0x3E,0xFF,0x02,0x05,0x46])
+        length = self.servo._parse_response_header(invalid_data,0xFF)
         self.assertIsNone(length)
 
 
