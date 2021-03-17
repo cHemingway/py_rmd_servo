@@ -35,6 +35,19 @@ class Test__parse_response_header(unittest.TestCase):
         self.assertIsNone(length)
 
 
+    def test_wrong_command(self):
+        # Test command 0x04, data length 0
+        data = bytearray([0x3E,0x04,0x02,0x00,0x44])
+        # Expect command 3, will not match
+        length = self.servo._parse_response_header(data,0x03) 
+        self.assertIsNone(length)
+
+    def test_wrong_id(self):
+        # ID should be 2 (see setup) so send 0x12 to cause failure
+        data = bytearray([0x3E, 0xaa, 0x12, 0x55, 0x50])
+        length = self.servo._parse_response_header(data,0xaa)
+        self.assertIsNone(length)
+
     def tearDown(self):
         mock.patch.stopall() # Stop mocks, or else other tests are corrupted
         return super().tearDown()
